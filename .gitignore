@@ -1,0 +1,19 @@
+# Ignore GeoIP databases and other data files
+data/
+
+# Common OS/editor clutter
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Go build artifacts
+bin/
+*.exe
+*.out
+
+# IDE/editor config
+.vscode/
+.idea/
