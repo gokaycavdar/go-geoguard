@@ -2,16 +2,22 @@ package models
 
 import "time"
 
-// LoginRecord, kullanıcının giriş anındaki verilerini temsil eder.
-// Dokümandaki LoginRecord struct yapısına sadık kalınmıştır.
 type LoginRecord struct {
-	UserID        string
-	Timestamp     time.Time
-	IPAddress     string
-	Latitude      float64
-	Longitude     float64
+	UserID    string
+	Timestamp time.Time
+	IPAddress string
+	
+	// Konum Bilgileri
+	IPLatitude      float64
+	IPLongitude     float64
+	DeviceLatitude  float64
+	DeviceLongitude float64
+	
 	CountryCode   string
 	CityGeonameID uint
 	ASN           uint
-	Fingerprint   string // Browser/OS hash [cite: 108]
+	Fingerprint   string
+	
+	// YENİ EKLENEN ALAN: Tarayıcı Dili
+	InputLanguage string 
 }

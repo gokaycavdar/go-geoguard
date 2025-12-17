@@ -10,4 +10,4 @@ type HistoryStore interface {
 	
 	// Yeni giriş kaydını saklar.
 	SaveRecord(record *models.LoginRecord) error
-}
+}	

@@ -1,9 +1,9 @@
 package rules
 
 import (
-	"fmt"
 	"github.com/gokaycavdar/go-geoguard/pkg/models"
 )
+// ... geri kalan kod aynı ...
 
 // VPNCheckRule, bilinen VPN/Hosting sağlayıcılarına ait ASN'leri kontrol eder.
 type VPNCheckRule struct {

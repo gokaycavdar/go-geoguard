@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gokaycavdar/go-geoguard/pkg/geoip"
@@ -12,11 +11,12 @@ import (
 
 // Input, geliştiricinin analiz için gönderdiği veridir.
 type Input struct {
-	UserID    string
-	IPAddress string
-	Latitude  float64 // Opsiyonel: Cihazdan gelen GPS verisi
-	Longitude float64 // Opsiyonel: Cihazdan gelen GPS verisi
-	UserAgent string  // Browser/OS tespiti için
+	UserID         string
+	IPAddress      string
+	Latitude       float64
+	Longitude      float64
+	UserAgent      string
+	AcceptLanguage string // YENİ: Tarayıcı Dili (Örn: "tr-TR")
 }
 
 // GeoGuard, güvenlik motorunun ana yapısıdır.
@@ -36,7 +36,6 @@ func New(geoService *geoip.Service, store storage.HistoryStore) *GeoGuard {
 }
 
 // AddRule, motora yeni bir kural ekler.
-// Modülerlik ilkesi gereği geliştirici istediği kuralı ekleyebilir.
 func (g *GeoGuard) AddRule(r rules.Rule) {
 	g.rules = append(g.rules, r)
 }
@@ -46,8 +45,6 @@ func (g *GeoGuard) Validate(input Input) (*models.RiskResult, *models.LoginRecor
 	// 1. GeoIP ve ASN verilerini getir (Enrichment)
 	geoData, err := g.geoService.GetLocation(input.IPAddress)
 	if err != nil {
-		// IP çözülemezse bile işlem devam edebilir ancak konum verisi boş olur.
-		// Gerçek bir uygulamada bu durumu loglamak gerekir.
 		geoData = &geoip.GeoData{}
 	}
 
@@ -58,25 +55,23 @@ func (g *GeoGuard) Validate(input Input) (*models.RiskResult, *models.LoginRecor
 
 	// 2. Analiz edilecek LoginRecord nesnesini oluştur
 	currentRecord := models.LoginRecord{
-		UserID:        input.UserID,
-		Timestamp:     time.Now(),
-		IPAddress:     input.IPAddress,
-		Latitude:      geoData.Latitude,  // IP'den gelen konum
-		Longitude:     geoData.Longitude, // IP'den gelen konum
-		CountryCode:   geoData.CountryCode,
-		CityGeonameID: geoData.CityGeonameID,
-		ASN:           asn,
-		Fingerprint:   input.UserAgent, // Basitleştirilmiş fingerprint (sonra detaylandırılabilir)
+		UserID:          input.UserID,
+		Timestamp:       time.Now(),
+		IPAddress:       input.IPAddress,
+		IPLatitude:      geoData.Latitude,
+		IPLongitude:     geoData.Longitude,
+		DeviceLatitude:  input.Latitude,
+		DeviceLongitude: input.Longitude,
+		CountryCode:     geoData.CountryCode,
+		CityGeonameID:   geoData.CityGeonameID,
+		ASN:             asn,
+		Fingerprint:     input.UserAgent,
+		InputLanguage:   input.AcceptLanguage, // YENİ: Veriyi modele aktarıyoruz
 	}
-	
-	// Not: Input içinde GPS verisi geldiyse, bu "IP-GPS Crosscheck" kuralında ayrıca kullanılacaktır.
-	// Ancak LoginRecord genellikle IP tabanlı konumu saklar.
 
 	// 3. Kullanıcının geçmiş verisini getir (Stateful kurallar için)
 	lastRecord, err := g.historyStore.GetLastRecord(input.UserID)
 	if err != nil {
-		// Veritabanı hatası kritik olabilir veya "ilk giriş" gibi davranılabilir.
-		// Şimdilik nil kabul ediyoruz (ilk giriş).
 		lastRecord = nil
 	}
 
@@ -88,26 +83,20 @@ func (g *GeoGuard) Validate(input Input) (*models.RiskResult, *models.LoginRecor
 	}
 
 	for _, rule := range g.rules {
-		// Kuralı çalıştır
 		score, err := rule.Validate(currentRecord, lastRecord)
 		if err != nil {
-			// Kural çalışırken hata oluştu (loglanmalı)
 			continue
 		}
 
-		// Eğer kural ihlali varsa (skor > 0)
 		if score > 0 {
 			result.TotalRiskScore += score
 			result.Violations = append(result.Violations, models.Violation{
 				RuleName:  rule.Name(),
 				RiskScore: score,
-				Reason:    rule.Description(), // Basitçe description dönüyoruz, detaylandırılabilir.
+				Reason:    rule.Description(),
 			})
 		}
 	}
-
-	// Not: Bloklama mantığı (IsBlocked) geliştiricinin belirleyeceği bir eşik değere göre
-	// dışarıda veya burada set edilebilir. Şimdilik skoru hesaplayıp bırakıyoruz.
 
 	return result, &currentRecord, nil
 }
