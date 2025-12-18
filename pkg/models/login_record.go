@@ -16,8 +16,15 @@ type LoginRecord struct {
 	CountryCode   string
 	CityGeonameID uint
 	ASN           uint
-	Fingerprint   string
 	
-	// YENİ EKLENEN ALAN: Tarayıcı Dili
-	InputLanguage string 
+	// Cihaz Parmak İzi
+	Fingerprint     string // Ham UserAgent (geriye uyumluluk)
+	FingerprintHash string // UserAgent + Language hash'i
+	
+	// Tarayıcı Dili
+	InputLanguage string
+	
+	// Timezone (VPN Detection için)
+	IPTimezone     string // IP'den alınan timezone (Örn: "Europe/Amsterdam")
+	ClientTimezone string // Client'tan alınan timezone (Örn: "Europe/Istanbul")
 }

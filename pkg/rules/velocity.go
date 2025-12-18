@@ -23,7 +23,7 @@ func (v *VelocityRule) Name() string {
 }
 
 func (v *VelocityRule) Description() string {
-	return fmt.Sprintf("İki giriş arasındaki hızın %.0f km/s sınırını aşıp aşmadığını kontrol eder.", v.MaxSpeedKmh)
+	return fmt.Sprintf("İki giriş arasındaki hızın %.0f km/h sınırını aşıp aşmadığını kontrol eder.", v.MaxSpeedKmh)
 }
 
 func (v *VelocityRule) Validate(input models.LoginRecord, last *models.LoginRecord) (int, error) {

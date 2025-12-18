@@ -14,6 +14,7 @@ type GeoData struct {
 	CityGeonameID uint
 	Latitude      float64
 	Longitude     float64
+	Timezone      string // Örn: "Europe/Istanbul"
 }
 
 // Service, GeoIP ve ASN veritabanı işlemlerini yönetir.
@@ -70,6 +71,7 @@ func (s *Service) GetLocation(ipAddress string) (*GeoData, error) {
 		CityGeonameID: uint(record.City.GeoNameID),
 		Latitude:      record.Location.Latitude,
 		Longitude:     record.Location.Longitude,
+		Timezone:      record.Location.TimeZone,
 	}, nil
 }
 

@@ -1,12 +1,11 @@
 package rules
 
 import (
-	"strings"
-
 	"github.com/gokaycavdar/go-geoguard/pkg/models"
 )
 
-// CountryMismatchRule, IP ülkesi ile tarayıcı dilinin uyuşup uyuşmadığını kontrol eder.
+// CountryMismatchRule, kullanıcının önceki girişe göre ülke değiştirip değiştirmediğini kontrol eder.
+// Bu stateful bir kuraldır ve geçmiş veri gerektirir.
 type CountryMismatchRule struct {
 	RiskScore int
 }
@@ -16,40 +15,28 @@ func NewCountryMismatchRule(score int) *CountryMismatchRule {
 }
 
 func (c *CountryMismatchRule) Name() string {
-	return "Country/Language Mismatch"
+	return "Country Change Detection"
 }
 
 func (c *CountryMismatchRule) Description() string {
-	return "IP adresi ülkesi ile tarayıcı dil ayarlarının tutarsızlığını kontrol eder."
+	return "Kullanıcının önceki girişe göre ülke değiştirip değiştirmediğini kontrol eder."
 }
 
 func (c *CountryMismatchRule) Validate(input models.LoginRecord, last *models.LoginRecord) (int, error) {
-	// Veri eksikse kontrol etme
-	if input.CountryCode == "" || input.InputLanguage == "" {
-		return 0, nil
-	}
-	
-	// Gelen dil verisi genelde şöyledir: "tr-TR,tr;q=0.9"
-	// Biz sadece ilk 2 harfi alalım: "tr"
-	if len(input.InputLanguage) < 2 {
+	// İlk giriş veya geçmiş veri yoksa kontrol yapılamaz
+	if last == nil {
 		return 0, nil
 	}
 
-	lang := strings.ToLower(input.InputLanguage[:2])           // "tr"
-	country := strings.ToLower(input.CountryCode)              // GeoIP'den gelen ülke kodu (örn: "de")
+	// Ülke bilgisi eksikse kontrol yapılamaz
+	if last.CountryCode == "" || input.CountryCode == "" {
+		return 0, nil
+	}
 
-	// --- SENARYO: Almanya IP'si ama Türkçe Tarayıcı ---
-	// Bu durum VPN kullanımını veya "Gurbetçi" durumunu işaret edebilir.
-	if country == "de" && lang == "tr" {
-		// Log mesajı veya reason dönebiliriz
+	// Kullanıcı farklı bir ülkeden giriş yapıyorsa risk puanı ekle
+	if input.CountryCode != last.CountryCode {
 		return c.RiskScore, nil
 	}
-    
-    // --- SENARYO: Rusya/Çin IP'si ama İngilizce Tarayıcı ---
-    // Genelde saldırganlar varsayılan İngilizce Kali Linux/Windows kullanır.
-    if (country == "ru" || country == "cn") && lang == "en" {
-        return c.RiskScore, nil
-    }
 
 	return 0, nil
 }

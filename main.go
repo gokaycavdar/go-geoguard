@@ -20,6 +20,7 @@ type APIRequest struct {
 	Longitude      float64 `json:"longitude"`
 	UserAgent      string  `json:"user_agent"`
 	AcceptLanguage string  `json:"accept_language"`
+	Timezone       string  `json:"timezone"` // Client timezone: JS ile alınır
 }
 
 var guardEngine *engine.GeoGuard
@@ -62,6 +63,7 @@ func handleValidate(c *gin.Context) {
 		Longitude:      req.Longitude,
 		UserAgent:      req.UserAgent,
 		AcceptLanguage: req.AcceptLanguage,
+		ClientTimezone: req.Timezone,
 	}
 
 	// Analiz
@@ -105,9 +107,24 @@ func mapViolations(violations []models.Violation) []map[string]interface{} {
 }
 
 func configureRules(eng *engine.GeoGuard) {
-	eng.AddRule(rules.NewGeofencingRule(39.9334, 32.8597, 2000.0, 50)) // TR Geofence
-	eng.AddRule(rules.DefaultVPNCheckRule(30))                         // VPN
-	eng.AddRule(rules.NewVelocityRule(900.0, 80))                      // Hız
-	eng.AddRule(rules.NewIPGPSRule(100.0, 40))                         // IP-GPS
-	eng.AddRule(rules.NewCountryMismatchRule(25))                      // Dil
+	// Stateless Kurallar
+	eng.AddRule(rules.NewGeofencingRule(39.9334, 32.8597, 2000.0, 50)) // Geofencing
+	eng.AddRule(rules.DefaultDataCenterRule(30))                       // Data Center (ASN)
+
+	// Open Proxy - IPsum Level 3 listesinden yükle
+	if proxyRule, err := rules.LoadOpenProxyRule("data/ipsum_level3.txt", 40); err == nil {
+		eng.AddRule(proxyRule)
+		log.Printf("✓ Open Proxy kuralı yüklendi (%d IP)", proxyRule.Count())
+	} else {
+		log.Printf("⚠ Open Proxy listesi yüklenemedi: %v (varsayılan kullanılıyor)", err)
+		eng.AddRule(rules.DefaultOpenProxyRule(40))
+	}
+
+	eng.AddRule(rules.NewIPGPSRule(100.0, 40))    // IP-GPS Crosscheck
+	eng.AddRule(rules.NewTimezoneRule(45))        // Timezone Mismatch (VPN Detection)
+
+	// Stateful Kurallar
+	eng.AddRule(rules.NewVelocityRule(900.0, 80))  // Impossible Travel
+	eng.AddRule(rules.NewFingerprintRule(35))      // Device Fingerprint
+	eng.AddRule(rules.NewCountryMismatchRule(25))  // Country Change
 }

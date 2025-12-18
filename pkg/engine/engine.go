@@ -16,7 +16,8 @@ type Input struct {
 	Latitude       float64
 	Longitude      float64
 	UserAgent      string
-	AcceptLanguage string // YENİ: Tarayıcı Dili (Örn: "tr-TR")
+	AcceptLanguage string // Tarayıcı Dili (Örn: "tr-TR")
+	ClientTimezone string // Tarayıcı Timezone (Örn: "Europe/Istanbul") - JS: Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
 // GeoGuard, güvenlik motorunun ana yapısıdır.
@@ -66,7 +67,10 @@ func (g *GeoGuard) Validate(input Input) (*models.RiskResult, *models.LoginRecor
 		CityGeonameID:   geoData.CityGeonameID,
 		ASN:             asn,
 		Fingerprint:     input.UserAgent,
-		InputLanguage:   input.AcceptLanguage, // YENİ: Veriyi modele aktarıyoruz
+		FingerprintHash: rules.GenerateFingerprintHash(input.UserAgent, input.AcceptLanguage),
+		InputLanguage:   input.AcceptLanguage,
+		IPTimezone:      geoData.Timezone,
+		ClientTimezone:  input.ClientTimezone,
 	}
 
 	// 3. Kullanıcının geçmiş verisini getir (Stateful kurallar için)
