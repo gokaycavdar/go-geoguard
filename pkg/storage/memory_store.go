@@ -7,21 +7,32 @@ import (
 	"github.com/gokaycavdar/go-geoguard/pkg/models"
 )
 
-// MemoryStore, verileri bellekte (RAM) tutan thread-safe bir yapıdır.
-// Sadece test ve geliştirme amaçlıdır.
+// MemoryStore is a thread-safe in-memory implementation of HistoryStore.
+// Suitable for testing, development, and single-instance deployments.
+//
+// For production use with multiple instances, implement HistoryStore
+// with a distributed backend like Redis or PostgreSQL.
+//
+// Privacy Note:
+// This store only accepts privacy-safe records:
+//   - MaskedIPPrefix (not raw IP)
+//   - CountryCode, CityGeonameID (not coordinates)
+//
+// All privacy transformations are handled by the engine layer.
 type MemoryStore struct {
 	data map[string]*models.LoginRecord // Key: UserID
-	mu   sync.RWMutex                   // Eşzamanlı erişim (concurrency) için kilit
+	mu   sync.RWMutex                   // Protects concurrent access
 }
 
-// NewMemoryStore yeni bir bellek deposu oluşturur.
+// NewMemoryStore creates a new in-memory history store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		data: make(map[string]*models.LoginRecord),
 	}
 }
 
-// GetLastRecord, kullanıcının son kaydını getirir.
+// GetLastRecord retrieves the most recent login record for a user.
+// Returns nil, nil if no previous record exists.
 func (m *MemoryStore) GetLastRecord(userID string) (*models.LoginRecord, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -29,64 +40,22 @@ func (m *MemoryStore) GetLastRecord(userID string) (*models.LoginRecord, error) 
 	if record, exists := m.data[userID]; exists {
 		return record, nil
 	}
-	
-	// Kayıt yoksa nil dönebiliriz veya özel bir hata fırlatabiliriz.
-	// Engine tarafında nil kontrolü yaptığımız için burada hata dönmemize gerek yok.
-	return nil, nil 
+
+	return nil, nil
 }
 
-// SaveRecord, yeni kaydı belleğe yazar.
-package storage
-
-import (
-	"errors"
-	"net"
-	"sync"
-	"github.com/gokaycavdar/go-geoguard/pkg/models"
-)
-
-// ... (Diğer struct tanımları aynı)
-
-// MaskIP, IP adresinin son kısmını gizler (Privacy-First)
-// IPv4: 192.168.1.55 -> 192.168.1.0
-// IPv6: 2001:db8::1  -> 2001:db8::
-func maskIP(ipStr string) string {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return ""
-	}
-	
-	// IPv4 Maskeleme (/24 subnet - Son 8 bit gizlenir)
-	if ipv4 := ip.To4(); ipv4 != nil {
-		return ipv4.Mask(net.CIDRMask(24, 32)).String()
-	}
-	
-	// IPv6 Maskeleme (/48 subnet)
-	if ipv6 := ip.To16(); ipv6 != nil {
-		return ipv6.Mask(net.CIDRMask(48, 128)).String()
-	}
-	return ""
-}
-
+// SaveRecord stores a new login record.
+// The record is copied to prevent external mutations.
 func (m *MemoryStore) SaveRecord(record *models.LoginRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if record == nil {
-		return errors.New("kayıt boş olamaz")
+		return errors.New("record cannot be nil")
 	}
 
-	// 1. Orijinal veriyi bozmamak için kopyasını oluştur
+	// Copy the record to prevent external mutations
 	recordToSave := *record
-
-	// 2. KRİTİK ADIM: IP Adresini Maskele
-	// Silmiyoruz (""), Maskeliyoruz ("88.xxx.xxx.0")
-	// Böylece hem gizlilik sağlanır hem de subnet analizi yapılabilir.
-	if recordToSave.IPAddress != "" {
-		recordToSave.IPAddress = maskIP(recordToSave.IPAddress)
-	}
-
-	// 3. Kaydet
 	m.data[record.UserID] = &recordToSave
 	return nil
 }

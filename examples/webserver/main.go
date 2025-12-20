@@ -1,3 +1,13 @@
+// Package main demonstrates GeoGuard integration in a web server context.
+//
+// This example shows how to:
+//   - Initialize GeoGuard with GeoIP databases
+//   - Configure security rules with appropriate risk scores
+//   - Process login requests and correlate frontend/backend signals
+//   - Return explainable risk assessments to clients
+//
+// Run with: go run main.go
+// Then visit: http://localhost:8080
 package main
 
 import (
@@ -12,110 +22,128 @@ import (
 	"github.com/gokaycavdar/go-geoguard/pkg/storage"
 )
 
-// LoginRequest: Frontend'den gelen veriler
-// NOT: IP, User-Agent, Accept-Language backend tarafından otomatik alınır!
-// Test modunda ip_override ile farklı IP simüle edilebilir.
+// LoginRequest represents data sent by the frontend.
+//
+// Backend-derived signals (IP, User-Agent, Accept-Language) are extracted
+// from HTTP headers automatically. Frontend-derived signals (GPS, timezone)
+// are sent in the request body.
 type LoginRequest struct {
-	UserID     string  `json:"user_id" binding:"required"`
-	Latitude   float64 `json:"latitude"`  // GPS koordinatı (opsiyonel)
-	Longitude  float64 `json:"longitude"` // GPS koordinatı (opsiyonel)
-	Timezone   string  `json:"timezone"`  // JS: Intl.DateTimeFormat().resolvedOptions().timeZone
-	IPOverride string  `json:"ip_override"` // TEST: Farklı IP simülasyonu için
+	// UserID is required - identifies the user attempting to log in
+	UserID string `json:"user_id" binding:"required"`
+
+	// Optional GPS coordinates from device (requires user permission)
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+
+	// Browser timezone from JavaScript:
+	// Intl.DateTimeFormat().resolvedOptions().timeZone
+	Timezone string `json:"timezone"`
+
+	// For testing only - allows simulating different IP addresses
+	// MUST be disabled in production!
+	IPOverride string `json:"ip_override,omitempty"`
 }
 
 var guardEngine *engine.GeoGuard
 var historyStore storage.HistoryStore
 
 func main() {
-	// 1. GeoIP Servisini Başlat
-	geoService, err := geoip.NewService("../../data/GeoLite2-City.mmdb", "../../data/GeoLite2-ASN.mmdb")
+	// 1. Initialize GeoIP service with MaxMind databases
+	geoService, err := geoip.NewService(
+		"../../data/GeoLite2-City.mmdb",
+		"../../data/GeoLite2-ASN.mmdb",
+	)
 	if err != nil {
-		log.Fatalf("GeoIP Hatası: %v", err)
+		log.Fatalf("GeoIP initialization failed: %v", err)
 	}
 	defer geoService.Close()
 
-	// 2. History Store (Gerçek uygulamada Redis/PostgreSQL kullanılır)
+	// 2. Create history store (use Redis/PostgreSQL in production)
 	historyStore = storage.NewMemoryStore()
 
-	// 3. GeoGuard Engine'i Oluştur
+	// 3. Initialize security engine
 	guardEngine = engine.New(geoService, historyStore)
 
-	// 4. Kuralları Yükle (Geliştirici istediğini seçer)
+	// 4. Configure security rules
 	configureRules(guardEngine)
 
-	// 5. Web Sunucusu
+	// 5. Setup HTTP server
 	r := gin.Default()
-	
-	// Güvenlik: Proxy arkasındaysa gerçek IP'yi al
+
+	// Security: Trust only localhost as proxy
 	r.SetTrustedProxies([]string{"127.0.0.1"})
-	
-	// Demo HTML sayfası
+
+	// Serve demo UI
 	r.StaticFile("/", "./index.html")
 	r.StaticFile("/index.html", "./index.html")
-	
-	// API Endpoint
+
+	// API endpoint
 	r.POST("/api/v1/login", handleLogin)
-	
-	log.Println("🚀 GeoGuard Demo Sunucusu - http://localhost:8080")
+
+	log.Println("GeoGuard Demo Server running at http://localhost:8080")
 	r.Run(":8080")
 }
 
 func handleLogin(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id gerekli"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id is required"})
 		return
 	}
 
-	// ============================================
-	// GERÇEK DÜNYA: Backend otomatik alır
-	// ============================================
-	ipAddress := c.ClientIP()                        // Gerçek IP
-	userAgent := c.GetHeader("User-Agent")           // Tarayıcı bilgisi
-	acceptLanguage := c.GetHeader("Accept-Language") // Dil tercihi
+	// Extract backend-derived signals from HTTP request
+	// These are authoritative and cannot be spoofed by the client
+	ipAddress := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+	acceptLanguage := c.GetHeader("Accept-Language")
 
-	// TEST MODE: IP override varsa kullan (sadece demo/test için!)
+	// TEST MODE: Allow IP override for demonstration only
+	// WARNING: Must be disabled in production!
 	if req.IPOverride != "" {
 		ipAddress = req.IPOverride
-		log.Printf("⚠️ TEST MODE: IP override kullanılıyor: %s", ipAddress)
+		log.Printf("TEST MODE: Using IP override: %s", ipAddress)
 	}
 
-	// Engine Input Hazırlığı
+	// Prepare input correlating frontend and backend signals
 	input := engine.Input{
 		UserID:         req.UserID,
-		IPAddress:      ipAddress,       // ✅ Backend'den
-		Latitude:       req.Latitude,    // Frontend GPS
-		Longitude:      req.Longitude,   // Frontend GPS
-		UserAgent:      userAgent,       // ✅ Backend'den
-		AcceptLanguage: acceptLanguage,  // ✅ Backend'den
-		ClientTimezone: req.Timezone,    // Frontend JS
+		IPAddress:      ipAddress,       // Backend-derived (authoritative)
+		Latitude:       req.Latitude,    // Frontend-derived (optional)
+		Longitude:      req.Longitude,   // Frontend-derived (optional)
+		UserAgent:      userAgent,       // Backend-derived (authoritative)
+		AcceptLanguage: acceptLanguage,  // Backend-derived
+		ClientTimezone: req.Timezone,    // Frontend-derived (from JS)
 	}
 
-	// Risk Analizi
+	// Perform risk analysis
 	result, record, err := guardEngine.Validate(input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Analiz hatası"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "analysis failed"})
 		return
 	}
 
-	// Karar: 100+ puan = BLOCKED
-	isBlocked := result.TotalRiskScore >= 100
+	// Determine status based on risk score thresholds
+	// These thresholds should be tuned based on your risk tolerance
 	status := "ALLOWED"
-	if isBlocked {
+	if result.TotalRiskScore >= 100 {
 		status = "BLOCKED"
-	} else {
-		// Başarılı giriş → Geçmişe kaydet (Stateful kurallar için)
+	} else if result.TotalRiskScore >= 50 {
+		status = "REVIEW"
+	}
+
+	// Save record for future stateful analysis (only if not blocked)
+	if status != "BLOCKED" {
 		historyStore.SaveRecord(record)
 	}
 
-	// Response
+	// Build response with explainable risk assessment
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":    req.UserID,
 		"status":     status,
 		"risk_score": result.TotalRiskScore,
 		"violations": formatViolations(result.Violations),
 		"debug": gin.H{
-			"detected_ip":       ipAddress,
+			"masked_ip_prefix":  record.MaskedIPPrefix, // Privacy-safe, never raw IP
 			"detected_country":  record.CountryCode,
 			"detected_timezone": record.IPTimezone,
 			"client_timezone":   record.ClientTimezone,
@@ -124,52 +152,71 @@ func handleLogin(c *gin.Context) {
 }
 
 func formatViolations(violations []models.Violation) []gin.H {
-	list := make([]gin.H, 0)
+	result := make([]gin.H, 0, len(violations))
 	for _, v := range violations {
-		list = append(list, gin.H{
+		result = append(result, gin.H{
 			"rule":   v.RuleName,
 			"score":  v.RiskScore,
 			"reason": v.Reason,
 		})
 	}
-	return list
+	return result
 }
 
 func configureRules(eng *engine.GeoGuard) {
-	// =============================================
-	// STATELESS KURALLAR (Geçmiş veriye ihtiyaç yok)
-	// =============================================
-	
-	// 1. Geofencing: Türkiye merkezli, 500km yarıçap
+	// =====================================================
+	// STATELESS RULES (no historical data required)
+	// These rules evaluate each login attempt independently
+	// =====================================================
+
+	// 1. Geofencing: Define allowed geographic area
+	//    Center: Turkey (39°N, 35°E), Radius: 500km
+	//    Risk Score: 50 if login originates outside allowed area
 	eng.AddRule(rules.NewGeofencingRule(39.0, 35.0, 500.0, 50))
-	
-	// 2. Data Center Detection: ASN tabanlı hosting tespiti
+
+	// 2. DataCenter Detection: Identify hosting/cloud IPs
+	//    Uses ASN database to detect known hosting providers
+	//    Risk Score: 30 for data center IPs
 	eng.AddRule(rules.DefaultDataCenterRule(30))
-	
-	// 3. Open Proxy Detection: IPsum listesinden
+
+	// 3. Open Proxy Detection: Known malicious IP prefixes
+	//    Uses IPsum threat intelligence list
+	//    Risk Score: 40 for known proxy/VPN endpoints
 	if proxyRule, err := rules.LoadOpenProxyRule("../../data/ipsum_level3.txt", 40); err == nil {
 		eng.AddRule(proxyRule)
-		log.Printf("✓ Open Proxy kuralı yüklendi (%d IP)", proxyRule.Count())
+		log.Printf("Loaded proxy blacklist: %d prefixes", proxyRule.Count())
 	}
-	
-	// 4. IP-GPS Crosscheck: 50km tolerans
+
+	// 4. IP-GPS Crosscheck: Detect location spoofing
+	//    Compares IP-derived location with client-provided GPS
+	//    Tolerance: 50km, Risk Score: 40 for significant mismatch
 	eng.AddRule(rules.NewIPGPSRule(50.0, 40))
-	
-	// 5. Timezone Mismatch: VPN Detection
+
+	// 5. Timezone Mismatch: Detect VPN usage
+	//    Compares IP timezone with browser JavaScript timezone
+	//    Risk Score: 45 for timezone inconsistency
 	eng.AddRule(rules.NewTimezoneRule(45))
 
-	// =============================================
-	// STATEFUL KURALLAR (Geçmiş veri gerekli)
-	// =============================================
-	
-	// 6. Velocity Check: Impossible Travel (max 900 km/h)
+	// =====================================================
+	// STATEFUL RULES (require historical data)
+	// These rules compare current login with user's history
+	// =====================================================
+
+	// 6. Velocity Check: Detect impossible travel
+	//    Flags if user "travels" faster than 900 km/h between logins
+	//    Risk Score: 80 for impossible travel detection
+	//    Note: VelocityRule now receives coordinates from engine via GeoContext
 	eng.AddRule(rules.NewVelocityRule(900.0, 80))
-	
-	// 7. Device Fingerprint: Cihaz değişikliği
+
+	// 7. Device Fingerprint: Track device changes
+	//    Monitors User-Agent + Accept-Language consistency
+	//    Risk Score: 35 for new device detection
 	eng.AddRule(rules.NewFingerprintRule(35))
-	
-	// 8. Country Change: Ülke değişikliği
+
+	// 8. Country Mismatch: Track geographic consistency
+	//    Flags when user's country changes between logins
+	//    Risk Score: 25 for country change (lower than velocity)
 	eng.AddRule(rules.NewCountryMismatchRule(25))
-	
-	log.Println("✓ 8 kural yüklendi (5 stateless, 3 stateful)")
+
+	log.Println("Configured 8 security rules (5 stateless, 3 stateful)")
 }

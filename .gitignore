@@ -1,5 +1,7 @@
 # Ignore GeoIP databases and other data files
 data/
+data/*.mmdb
+data/*.txt
 
 # Common OS/editor clutter
 .DS_Store
@@ -17,3 +19,5 @@ bin/
 # IDE/editor config
 .vscode/
 .idea/
+
+examples/debug/

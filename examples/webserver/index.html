@@ -79,6 +79,7 @@
         }
         #result.success { background: rgba(0,255,136,0.1); border: 1px solid #00ff88; }
         #result.blocked { background: rgba(255,68,68,0.1); border: 1px solid #ff4444; }
+        #result.review { background: rgba(255,200,0,0.1); border: 1px solid #ffc800; }
         #result h4 { margin-bottom: 10px; }
         #result pre { 
             background: rgba(0,0,0,0.3); 
@@ -96,6 +97,7 @@
         }
         .status-badge.allowed { background: #00ff88; color: #000; }
         .status-badge.blocked { background: #ff4444; color: #fff; }
+        .status-badge.review { background: #ffc800; color: #000; }
         .detected-data { 
             display: grid; 
             grid-template-columns: repeat(2, 1fr); 
@@ -108,7 +110,16 @@
             border-radius: 6px;
         }
         .detected-item label { font-size: 0.8em; color: #888; }
-        .detected-item span { font-family: monospace; color: #00d4ff; }
+        .detected-item span { font-family: monospace; color: #00d4ff; word-break: break-all; }
+        .warning-box {
+            background: rgba(255,200,0,0.1);
+            border: 1px solid rgba(255,200,0,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+            color: #ffc800;
+        }
     </style>
 </head>
 <body>
@@ -122,6 +133,10 @@
                 <p>Aşağıdaki veriler <strong>JavaScript tarafından otomatik</strong> algılanır ve sunucuya gönderilir:</p>
             </div>
             <div class="detected-data">
+                <div class="detected-item">
+                    <label>Public IP Address</label>
+                    <span id="detected-ip">Algılanıyor...</span>
+                </div>
                 <div class="detected-item">
                     <label>Timezone</label>
                     <span id="detected-timezone">Algılanıyor...</span>
@@ -147,6 +162,10 @@
                 <label>User ID</label>
                 <input type="text" id="userId" value="demo_user_001" placeholder="Kullanıcı ID">
             </div>
+            <div class="form-group">
+                <label>IP Override (Test için - Boş bırakılırsa public IP kullanılır)</label>
+                <input type="text" id="ipOverride" placeholder="örn: 185.107.56.1">
+            </div>
             <button onclick="testLogin()" id="loginBtn">🚀 Login & Risk Analizi</button>
             
             <div id="result"></div>
@@ -156,8 +175,12 @@
             <h3>ℹ️ Nasıl Çalışır?</h3>
             <div class="info-box">
                 <p><strong>Backend Otomatik Alır:</strong> IP Address, User-Agent, Accept-Language</p>
-                <p><strong>Frontend Gönderir:</strong> GPS Koordinatları, Timezone</p>
+                <p><strong>Frontend Gönderir:</strong> GPS Koordinatları, Timezone, Public IP (demo için)</p>
                 <p><strong>8 Kural Çalışır:</strong> Geofencing, Data Center, Open Proxy, IP-GPS, Timezone, Velocity, Fingerprint, Country Change</p>
+            </div>
+            <div class="warning-box">
+                ⚠️ <strong>Demo Modu:</strong> Localhost'ta çalıştığınız için gerçek IP adresiniz algılanamaz. 
+                Public IP otomatik olarak ipify.org'dan alınır ve sunucuya gönderilir.
             </div>
         </div>
     </div>
@@ -188,12 +211,41 @@
             );
         }
 
+        // Public IP algıla (demo için - localhost'ta çalışırken gerekli)
+        let publicIP = '';
+        
+        async function detectPublicIP() {
+            try {
+                // Try ipify first (supports IPv6)
+                const response = await fetch('https://api64.ipify.org?format=json');
+                const data = await response.json();
+                publicIP = data.ip;
+                document.getElementById('detected-ip').textContent = publicIP;
+            } catch (err) {
+                try {
+                    // Fallback to ipinfo
+                    const response = await fetch('https://ipinfo.io/json');
+                    const data = await response.json();
+                    publicIP = data.ip;
+                    document.getElementById('detected-ip').textContent = publicIP;
+                } catch (err2) {
+                    document.getElementById('detected-ip').textContent = 'Algılanamadı';
+                }
+            }
+        }
+        
+        detectPublicIP();
+
         async function testLogin() {
             const btn = document.getElementById('loginBtn');
             const resultDiv = document.getElementById('result');
             
             btn.disabled = true;
             btn.textContent = '⏳ Analiz ediliyor...';
+            
+            // IP override: önce input'tan, yoksa public IP'den
+            const ipOverrideInput = document.getElementById('ipOverride').value.trim();
+            const ipToUse = ipOverrideInput || publicIP;
             
             try {
                 const response = await fetch('/api/v1/login', {
@@ -203,21 +255,26 @@
                         user_id: document.getElementById('userId').value,
                         latitude: latitude,
                         longitude: longitude,
-                        timezone: timezone
+                        timezone: timezone,
+                        ip_override: ipToUse  // Send public IP for localhost demo
                     })
                 });
                 
                 const data = await response.json();
                 
-                const isBlocked = data.status === 'BLOCKED';
-                resultDiv.className = isBlocked ? 'blocked' : 'success';
+                const status = data.status;
+                let statusClass = 'success';
+                if (status === 'BLOCKED') statusClass = 'blocked';
+                else if (status === 'REVIEW') statusClass = 'review';
+                
+                resultDiv.className = statusClass;
                 resultDiv.style.display = 'block';
                 
                 resultDiv.innerHTML = `
-                    <span class="status-badge ${isBlocked ? 'blocked' : 'allowed'}">${data.status}</span>
+                    <span class="status-badge ${statusClass}">${data.status}</span>
                     <h4>Risk Skoru: ${data.risk_score}/100</h4>
                     <p style="color: #888; margin-bottom: 15px;">
-                        ${data.violations.length > 0 ? data.violations.length + ' kural ihlali tespit edildi' : 'Hiçbir kural ihlali yok'}
+                        ${data.violations && data.violations.length > 0 ? data.violations.length + ' kural ihlali tespit edildi' : 'Hiçbir kural ihlali yok'}
                     </p>
                     <pre>${JSON.stringify(data, null, 2)}</pre>
                 `;
