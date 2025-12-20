@@ -1,10 +1,20 @@
+/*
+Go-GeoGuard: Privacy-Focused Location-Based Security Rule Engine
+
+Bu dosya kütüphanenin nasıl kullanılacağını gösteren basit bir CLI örnektir.
+Gerçek web sunucu örneği için: examples/webserver/main.go
+
+Kullanım:
+	go run main.go
+
+Daha fazla bilgi için: https://github.com/gokaycavdar/go-geoguard
+*/
 package main
 
 import (
+	"fmt"
 	"log"
-	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/gokaycavdar/go-geoguard/pkg/engine"
 	"github.com/gokaycavdar/go-geoguard/pkg/geoip"
 	"github.com/gokaycavdar/go-geoguard/pkg/models"
@@ -12,119 +22,135 @@ import (
 	"github.com/gokaycavdar/go-geoguard/pkg/storage"
 )
 
-// APIRequest: Postman'den gelecek JSON formatı
-type APIRequest struct {
-	UserID         string  `json:"user_id"`
-	IPAddress      string  `json:"ip_address"`
-	Latitude       float64 `json:"latitude"`
-	Longitude      float64 `json:"longitude"`
-	UserAgent      string  `json:"user_agent"`
-	AcceptLanguage string  `json:"accept_language"`
-	Timezone       string  `json:"timezone"` // Client timezone: JS ile alınır
-}
-
-var guardEngine *engine.GeoGuard
-var historyStore storage.HistoryStore
-
 func main() {
-	// 1. Servisleri Başlat
+	fmt.Println("===========================================")
+	fmt.Println("  Go-GeoGuard - Location Security Engine  ")
+	fmt.Println("===========================================")
+	fmt.Println()
+
+	// 1. GeoIP Servisini Başlat
 	geoService, err := geoip.NewService("data/GeoLite2-City.mmdb", "data/GeoLite2-ASN.mmdb")
 	if err != nil {
-		log.Fatalf("GeoIP Hatası: %v", err)
+		log.Fatalf("GeoIP başlatılamadı: %v", err)
 	}
 	defer geoService.Close()
+	fmt.Println("✓ GeoIP servisi başlatıldı")
 
-	historyStore = storage.NewMemoryStore()
-	guardEngine = engine.New(geoService, historyStore)
+	// 2. History Store Oluştur
+	store := storage.NewMemoryStore()
+	fmt.Println("✓ Memory store oluşturuldu")
 
-	// 2. Kuralları Yükle
-	configureRules(guardEngine)
+	// 3. Engine'i Oluştur
+	guard := engine.New(geoService, store)
+	fmt.Println("✓ GeoGuard engine oluşturuldu")
 
-	// 3. Web Sunucusunu Başlat (Gin)
-	r := gin.Default()
-	r.POST("/api/v1/validate", handleValidate) // Endpoint: /api/v1/validate
-
-	log.Println("🚀 Sunucu 8080 portunda çalışıyor...")
-	r.Run(":8080")
-}
-
-func handleValidate(c *gin.Context) {
-	var req APIRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	// Engine Input Hazırlığı
-	input := engine.Input{
-		UserID:         req.UserID,
-		IPAddress:      req.IPAddress,
-		Latitude:       req.Latitude,
-		Longitude:      req.Longitude,
-		UserAgent:      req.UserAgent,
-		AcceptLanguage: req.AcceptLanguage,
-		ClientTimezone: req.Timezone,
-	}
-
-	// Analiz
-	result, record, err := guardEngine.Validate(input)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Motor hatası"})
-		return
-	}
-
-	// Basit Karar Mekanizması
-	isBlocked := result.TotalRiskScore >= 100
-	status := "ALLOWED"
-	if isBlocked {
-		status = "BLOCKED"
-	} else {
-		// Bloklanmadıysa geçmiş veriyi kaydet (Stateful kurallar için)
-		historyStore.SaveRecord(record)
-	}
-
-	// Cevap Dön
-	c.JSON(http.StatusOK, gin.H{
-		"user_id":     req.UserID,
-		"risk_score":  result.TotalRiskScore,
-		"status":      status,
-		"violations":  mapViolations(result.Violations),
-		"ip_country":  record.CountryCode, // Bilgi amaçlı dönüyoruz
-		"ip_city_id":  record.CityGeonameID,
-	})
-}
-
-// Yardımcı Fonksiyon: İhlal listesini sadece isim ve puan olarak sadeleştirir
-func mapViolations(violations []models.Violation) []map[string]interface{} {
-	list := make([]map[string]interface{}, 0)
-	for _, v := range violations {
-		list = append(list, map[string]interface{}{
-			"rule":  v.RuleName,
-			"score": v.RiskScore,
-		})
-	}
-	return list
-}
-
-func configureRules(eng *engine.GeoGuard) {
-	// Stateless Kurallar
-	eng.AddRule(rules.NewGeofencingRule(39.9334, 32.8597, 2000.0, 50)) // Geofencing
-	eng.AddRule(rules.DefaultDataCenterRule(30))                       // Data Center (ASN)
-
-	// Open Proxy - IPsum Level 3 listesinden yükle
+	// 4. Kuralları Ekle
+	guard.AddRule(rules.NewGeofencingRule(39.0, 35.0, 500.0, 50))    // Türkiye
+	guard.AddRule(rules.DefaultDataCenterRule(30))                   // ASN
+	guard.AddRule(rules.NewIPGPSRule(50.0, 40))                      // IP-GPS
+	guard.AddRule(rules.NewTimezoneRule(45))                         // Timezone
+	guard.AddRule(rules.NewVelocityRule(900.0, 80))                  // Velocity
+	guard.AddRule(rules.NewFingerprintRule(35))                      // Fingerprint
+	guard.AddRule(rules.NewCountryMismatchRule(25))                  // Country
+	
+	// Open Proxy kuralı (dosyadan)
 	if proxyRule, err := rules.LoadOpenProxyRule("data/ipsum_level3.txt", 40); err == nil {
-		eng.AddRule(proxyRule)
-		log.Printf("✓ Open Proxy kuralı yüklendi (%d IP)", proxyRule.Count())
-	} else {
-		log.Printf("⚠ Open Proxy listesi yüklenemedi: %v (varsayılan kullanılıyor)", err)
-		eng.AddRule(rules.DefaultOpenProxyRule(40))
+		guard.AddRule(proxyRule)
+		fmt.Printf("✓ Open Proxy kuralı yüklendi (%d IP)\n", proxyRule.Count())
 	}
+	
+	fmt.Println("✓ 8 kural eklendi")
+	fmt.Println()
 
-	eng.AddRule(rules.NewIPGPSRule(100.0, 40))    // IP-GPS Crosscheck
-	eng.AddRule(rules.NewTimezoneRule(45))        // Timezone Mismatch (VPN Detection)
+	// 5. Test: Normal Kullanıcı (Türkiye)
+	fmt.Println("--- TEST 1: Normal Kullanıcı (Türkiye) ---")
+	result1, _, _ := guard.Validate(engine.Input{
+		UserID:         "user_normal",
+		IPAddress:      "88.230.100.50",    // Türk Telekom
+		Latitude:       39.92,              // Ankara GPS
+		Longitude:      32.85,
+		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0",
+		AcceptLanguage: "tr-TR",
+		ClientTimezone: "Europe/Istanbul",
+	})
+	printResult(result1)
 
-	// Stateful Kurallar
-	eng.AddRule(rules.NewVelocityRule(900.0, 80))  // Impossible Travel
-	eng.AddRule(rules.NewFingerprintRule(35))      // Device Fingerprint
-	eng.AddRule(rules.NewCountryMismatchRule(25))  // Country Change
+	// 6. Test: VPN Kullanıcısı (Timezone mismatch)
+	fmt.Println("--- TEST 2: VPN Kullanıcısı (Amsterdam VPN) ---")
+	result2, _, _ := guard.Validate(engine.Input{
+		UserID:         "user_vpn",
+		IPAddress:      "185.107.56.1",     // Amsterdam datacenter
+		Latitude:       39.92,              // Ankara GPS (gerçek konum)
+		Longitude:      32.85,
+		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0",
+		AcceptLanguage: "tr-TR",
+		ClientTimezone: "Europe/Istanbul",  // Gerçek timezone
+	})
+	printResult(result2)
+
+	// 7. Test: Data Center IP (AWS)
+	fmt.Println("--- TEST 3: AWS Data Center IP ---")
+	result3, _, _ := guard.Validate(engine.Input{
+		UserID:         "user_aws",
+		IPAddress:      "52.94.76.1",       // AWS
+		Latitude:       0,
+		Longitude:      0,
+		UserAgent:      "curl/7.68.0",
+		AcceptLanguage: "en-US",
+		ClientTimezone: "",
+	})
+	printResult(result3)
+
+	// 8. Test: Impossible Travel (Stateful)
+	fmt.Println("--- TEST 4: Impossible Travel ---")
+	fmt.Println("İlk giriş: İstanbul")
+	result4a, record4, _ := guard.Validate(engine.Input{
+		UserID:         "user_travel",
+		IPAddress:      "88.230.100.50",
+		Latitude:       41.0,
+		Longitude:      29.0,
+		UserAgent:      "Mozilla/5.0",
+		AcceptLanguage: "tr-TR",
+		ClientTimezone: "Europe/Istanbul",
+	})
+	store.SaveRecord(record4) // Kaydet
+	printResult(result4a)
+
+	fmt.Println("5 dakika sonra: Londra'dan giriş (imkansız!)")
+	result4b, _, _ := guard.Validate(engine.Input{
+		UserID:         "user_travel",
+		IPAddress:      "81.2.69.142",      // Londra
+		Latitude:       51.5,
+		Longitude:      -0.1,
+		UserAgent:      "Mozilla/5.0",
+		AcceptLanguage: "en-GB",
+		ClientTimezone: "Europe/London",
+	})
+	printResult(result4b)
+
+	fmt.Println("===========================================")
+	fmt.Println("Demo tamamlandı!")
+	fmt.Println()
+	fmt.Println("Web demo için:")
+	fmt.Println("  cd examples/webserver && go run main.go")
+	fmt.Println("  Tarayıcıda: http://localhost:8080")
+	fmt.Println("===========================================")
 }
+
+func printResult(result *models.RiskResult) {
+	status := "✅ ALLOWED"
+	if result.TotalRiskScore >= 100 {
+		status = "❌ BLOCKED"
+	}
+	
+	fmt.Printf("Sonuç: %s (Skor: %d)\n", status, result.TotalRiskScore)
+	
+	if len(result.Violations) > 0 {
+		fmt.Println("İhlaller:")
+		for _, v := range result.Violations {
+			fmt.Printf("  - %s: +%d puan\n", v.RuleName, v.RiskScore)
+		}
+	}
+	fmt.Println()
+}
+

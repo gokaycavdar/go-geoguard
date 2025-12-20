@@ -36,6 +36,38 @@ func (m *MemoryStore) GetLastRecord(userID string) (*models.LoginRecord, error) 
 }
 
 // SaveRecord, yeni kaydı belleğe yazar.
+package storage
+
+import (
+	"errors"
+	"net"
+	"sync"
+	"github.com/gokaycavdar/go-geoguard/pkg/models"
+)
+
+// ... (Diğer struct tanımları aynı)
+
+// MaskIP, IP adresinin son kısmını gizler (Privacy-First)
+// IPv4: 192.168.1.55 -> 192.168.1.0
+// IPv6: 2001:db8::1  -> 2001:db8::
+func maskIP(ipStr string) string {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return ""
+	}
+	
+	// IPv4 Maskeleme (/24 subnet - Son 8 bit gizlenir)
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return ipv4.Mask(net.CIDRMask(24, 32)).String()
+	}
+	
+	// IPv6 Maskeleme (/48 subnet)
+	if ipv6 := ip.To16(); ipv6 != nil {
+		return ipv6.Mask(net.CIDRMask(48, 128)).String()
+	}
+	return ""
+}
+
 func (m *MemoryStore) SaveRecord(record *models.LoginRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -44,8 +76,17 @@ func (m *MemoryStore) SaveRecord(record *models.LoginRecord) error {
 		return errors.New("kayıt boş olamaz")
 	}
 
-	// Pointer'ın kopyasını saklamak daha güvenlidir ama şimdilik direkt atıyoruz.
-	// Yeni gelen kayıt "son kayıt" olarak güncellenir.
-	m.data[record.UserID] = record
+	// 1. Orijinal veriyi bozmamak için kopyasını oluştur
+	recordToSave := *record
+
+	// 2. KRİTİK ADIM: IP Adresini Maskele
+	// Silmiyoruz (""), Maskeliyoruz ("88.xxx.xxx.0")
+	// Böylece hem gizlilik sağlanır hem de subnet analizi yapılabilir.
+	if recordToSave.IPAddress != "" {
+		recordToSave.IPAddress = maskIP(recordToSave.IPAddress)
+	}
+
+	// 3. Kaydet
+	m.data[record.UserID] = &recordToSave
 	return nil
 }

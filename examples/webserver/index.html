@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go-GeoGuard Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #fff;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { 
+            text-align: center; 
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle { text-align: center; color: #888; margin-bottom: 40px; }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h3 { margin-bottom: 20px; color: #00d4ff; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; color: #aaa; font-size: 0.9em; }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 1em;
+        }
+        input:focus { outline: none; border-color: #00d4ff; }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover { transform: scale(1.02); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .info-box {
+            background: rgba(0,212,255,0.1);
+            border: 1px solid rgba(0,212,255,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+        .info-box code { 
+            background: rgba(0,0,0,0.3); 
+            padding: 2px 6px; 
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        #result.success { background: rgba(0,255,136,0.1); border: 1px solid #00ff88; }
+        #result.blocked { background: rgba(255,68,68,0.1); border: 1px solid #ff4444; }
+        #result h4 { margin-bottom: 10px; }
+        #result pre { 
+            background: rgba(0,0,0,0.3); 
+            padding: 15px; 
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 0.85em;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+        .status-badge.allowed { background: #00ff88; color: #000; }
+        .status-badge.blocked { background: #ff4444; color: #fff; }
+        .detected-data { 
+            display: grid; 
+            grid-template-columns: repeat(2, 1fr); 
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .detected-item {
+            background: rgba(0,0,0,0.2);
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .detected-item label { font-size: 0.8em; color: #888; }
+        .detected-item span { font-family: monospace; color: #00d4ff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ Go-GeoGuard</h1>
+        <p class="subtitle">Location-Based Security Rule Engine Demo</p>
+        
+        <div class="card">
+            <h3>📍 Otomatik Algılanan Veriler</h3>
+            <div class="info-box">
+                <p>Aşağıdaki veriler <strong>JavaScript tarafından otomatik</strong> algılanır ve sunucuya gönderilir:</p>
+            </div>
+            <div class="detected-data">
+                <div class="detected-item">
+                    <label>Timezone</label>
+                    <span id="detected-timezone">Algılanıyor...</span>
+                </div>
+                <div class="detected-item">
+                    <label>GPS Koordinatları</label>
+                    <span id="detected-gps">İzin bekleniyor...</span>
+                </div>
+                <div class="detected-item">
+                    <label>User-Agent</label>
+                    <span id="detected-ua">Algılanıyor...</span>
+                </div>
+                <div class="detected-item">
+                    <label>Dil Tercihi</label>
+                    <span id="detected-lang">Algılanıyor...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>🔐 Login Simülasyonu</h3>
+            <div class="form-group">
+                <label>User ID</label>
+                <input type="text" id="userId" value="demo_user_001" placeholder="Kullanıcı ID">
+            </div>
+            <button onclick="testLogin()" id="loginBtn">🚀 Login & Risk Analizi</button>
+            
+            <div id="result"></div>
+        </div>
+
+        <div class="card">
+            <h3>ℹ️ Nasıl Çalışır?</h3>
+            <div class="info-box">
+                <p><strong>Backend Otomatik Alır:</strong> IP Address, User-Agent, Accept-Language</p>
+                <p><strong>Frontend Gönderir:</strong> GPS Koordinatları, Timezone</p>
+                <p><strong>8 Kural Çalışır:</strong> Geofencing, Data Center, Open Proxy, IP-GPS, Timezone, Velocity, Fingerprint, Country Change</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Timezone algıla
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById('detected-timezone').textContent = timezone;
+        
+        // User-Agent ve Dil
+        document.getElementById('detected-ua').textContent = navigator.userAgent.substring(0, 50) + '...';
+        document.getElementById('detected-lang').textContent = navigator.language;
+        
+        // GPS koordinatları
+        let latitude = 0, longitude = 0;
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    latitude = pos.coords.latitude;
+                    longitude = pos.coords.longitude;
+                    document.getElementById('detected-gps').textContent = 
+                        `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                },
+                (err) => {
+                    document.getElementById('detected-gps').textContent = 'GPS izni verilmedi';
+                }
+            );
+        }
+
+        async function testLogin() {
+            const btn = document.getElementById('loginBtn');
+            const resultDiv = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Analiz ediliyor...';
+            
+            try {
+                const response = await fetch('/api/v1/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: document.getElementById('userId').value,
+                        latitude: latitude,
+                        longitude: longitude,
+                        timezone: timezone
+                    })
+                });
+                
+                const data = await response.json();
+                
+                const isBlocked = data.status === 'BLOCKED';
+                resultDiv.className = isBlocked ? 'blocked' : 'success';
+                resultDiv.style.display = 'block';
+                
+                resultDiv.innerHTML = `
+                    <span class="status-badge ${isBlocked ? 'blocked' : 'allowed'}">${data.status}</span>
+                    <h4>Risk Skoru: ${data.risk_score}/100</h4>
+                    <p style="color: #888; margin-bottom: 15px;">
+                        ${data.violations.length > 0 ? data.violations.length + ' kural ihlali tespit edildi' : 'Hiçbir kural ihlali yok'}
+                    </p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                
+            } catch (err) {
+                resultDiv.className = 'blocked';
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = `<h4>❌ Hata</h4><pre>${err.message}</pre>`;
+            }
+            
+            btn.disabled = false;
+            btn.textContent = '🚀 Login & Risk Analizi';
+        }
+    </script>
+</body>
+</html>
