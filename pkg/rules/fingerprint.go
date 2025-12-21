@@ -25,8 +25,8 @@ type FingerprintRule struct {
 	RiskScore int // Points to add when fingerprint changes
 }
 
-// NewFingerprintRule creates a new device fingerprint rule.
-func NewFingerprintRule(score int) *FingerprintRule {
+// Fingerprint creates a new device fingerprint rule.
+func Fingerprint(score int) *FingerprintRule {
 	return &FingerprintRule{RiskScore: score}
 }
 

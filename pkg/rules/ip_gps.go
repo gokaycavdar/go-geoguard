@@ -28,12 +28,12 @@ type IPGPSRule struct {
 	RiskScore     int     // Points to add when distance exceeds threshold
 }
 
-// NewIPGPSRule creates a new IP-GPS cross-check rule.
+// IPGPS creates a new IP-GPS cross-check rule.
 //
 // Parameters:
 //   - maxDist: Maximum allowed distance in kilometers (recommend 50-100 km)
 //   - score: Risk points to add when triggered
-func NewIPGPSRule(maxDist float64, score int) *IPGPSRule {
+func IPGPS(maxDist float64, score int) *IPGPSRule {
 	return &IPGPSRule{
 		MaxDistanceKm: maxDist,
 		RiskScore:     score,

@@ -66,7 +66,7 @@ type Input struct {
 // Usage:
 //
 //	engine := geoguard.New(geoService, historyStore)
-//	engine.AddRule(rules.NewVelocityRule(900, 80))
+//	engine.AddRule(rules.Velocity(900, 80))
 //	result, record, err := engine.Validate(input)
 type GeoGuard struct {
 	geoService   *geoip.Service

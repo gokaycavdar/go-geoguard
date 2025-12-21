@@ -66,16 +66,16 @@ func main() {
 //   - This ensures proper separation of concerns and testability
 func configureRules(guard *engine.GeoGuard) {
 	// Stateless Rules (no historical data needed)
-	guard.AddRule(rules.NewGeofencingRule(39.0, 35.0, 1500.0, 30))      // Allow Turkey + neighbors
-	guard.AddRule(rules.DefaultDataCenterRule(35))                      // Cloud provider detection
-	guard.AddRule(rules.NewIPGPSRule(100.0, 25))                        // IP-GPS distance check
-	guard.AddRule(rules.NewTimezoneRule(40))                            // Timezone mismatch
+	guard.AddRule(rules.Geofencing(39.0, 35.0, 1500.0, 30))      // Allow Turkey + neighbors
+	guard.AddRule(rules.DefaultDataCenterRule(35))               // Cloud provider detection
+	guard.AddRule(rules.IPGPS(100.0, 25))                        // IP-GPS distance check
+	guard.AddRule(rules.Timezone(40))                            // Timezone mismatch
 
 	// Stateful Rules (require historical login data)
 	// VelocityRule now receives coordinates from engine via GeoContext
-	guard.AddRule(rules.NewVelocityRule(900.0, 80))                     // Impossible travel
-	guard.AddRule(rules.NewFingerprintRule(30))                         // Device fingerprint change
-	guard.AddRule(rules.NewCountryMismatchRule(20))                     // Country change
+	guard.AddRule(rules.Velocity(900.0, 80))                     // Impossible travel
+	guard.AddRule(rules.Fingerprint(30))                         // Device fingerprint change
+	guard.AddRule(rules.CountryMismatch(20))                     // Country change
 
 	// Load proxy blacklist if available
 	if proxyRule, err := rules.LoadOpenProxyRule("../../data/ipsum_level3.txt", 45); err == nil {

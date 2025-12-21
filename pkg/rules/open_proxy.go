@@ -56,9 +56,9 @@ func maskIPToPrefix(ipStr string) string {
 	return ""
 }
 
-// NewOpenProxyRule creates a rule from a list of IP addresses.
+// OpenProxy creates a rule from a list of IP addresses.
 // IPs are automatically masked to /24 prefixes for privacy compliance.
-func NewOpenProxyRule(proxyIPs []string, score int) *OpenProxyRule {
+func OpenProxy(proxyIPs []string, score int) *OpenProxyRule {
 	prefixSet := make(map[string]bool, len(proxyIPs))
 	for _, ip := range proxyIPs {
 		prefix := maskIPToPrefix(ip)
@@ -135,7 +135,7 @@ func DefaultOpenProxyRule(score int) *OpenProxyRule {
 	exampleProxies := []string{
 		"185.220.101.1", "185.220.101.2", "185.220.102.1",
 	}
-	return NewOpenProxyRule(exampleProxies, score)
+	return OpenProxy(exampleProxies, score)
 }
 
 func (o *OpenProxyRule) Name() string {

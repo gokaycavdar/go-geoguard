@@ -35,12 +35,12 @@ type VelocityRule struct {
 	RiskScore   int     // Points to add when rule triggers
 }
 
-// NewVelocityRule creates a new velocity/impossible travel detection rule.
+// Velocity creates a new velocity/impossible travel detection rule.
 //
 // Parameters:
 //   - maxSpeed: Maximum realistic travel speed in km/h (recommend 900 for aircraft)
 //   - score: Risk points to add when triggered
-func NewVelocityRule(maxSpeed float64, score int) *VelocityRule {
+func Velocity(maxSpeed float64, score int) *VelocityRule {
 	return &VelocityRule{
 		MaxSpeedKmh: maxSpeed,
 		RiskScore:   score,

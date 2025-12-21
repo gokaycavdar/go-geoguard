@@ -26,8 +26,8 @@ type TimezoneRule struct {
 	RiskScore int // Points to add when timezones don't match
 }
 
-// NewTimezoneRule creates a new timezone mismatch rule.
-func NewTimezoneRule(score int) *TimezoneRule {
+// Timezone creates a new timezone mismatch rule.
+func Timezone(score int) *TimezoneRule {
 	return &TimezoneRule{RiskScore: score}
 }
 

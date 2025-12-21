@@ -20,8 +20,8 @@ type CountryMismatchRule struct {
 	RiskScore int // Points to add when country differs from previous login
 }
 
-// NewCountryMismatchRule creates a new country change detection rule.
-func NewCountryMismatchRule(score int) *CountryMismatchRule {
+// CountryMismatch creates a new country change detection rule.
+func CountryMismatch(score int) *CountryMismatchRule {
 	return &CountryMismatchRule{RiskScore: score}
 }
 

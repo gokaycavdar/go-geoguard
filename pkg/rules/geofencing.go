@@ -28,13 +28,13 @@ type GeofencingRule struct {
 	RiskScore int     // Points to add when outside the allowed area
 }
 
-// NewGeofencingRule creates a new geofencing rule.
+// Geofencing creates a new geofencing rule.
 //
 // Parameters:
 //   - lat, lon: Center coordinates of the allowed area
 //   - radius: Allowed radius in kilometers
 //   - score: Risk points to add when user is outside the area
-func NewGeofencingRule(lat, lon, radius float64, score int) *GeofencingRule {
+func Geofencing(lat, lon, radius float64, score int) *GeofencingRule {
 	return &GeofencingRule{
 		CenterLat: lat,
 		CenterLon: lon,

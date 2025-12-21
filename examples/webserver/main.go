@@ -172,7 +172,7 @@ func configureRules(eng *engine.GeoGuard) {
 	// 1. Geofencing: Define allowed geographic area
 	//    Center: Turkey (39°N, 35°E), Radius: 500km
 	//    Risk Score: 50 if login originates outside allowed area
-	eng.AddRule(rules.NewGeofencingRule(39.0, 35.0, 500.0, 50))
+	eng.AddRule(rules.Geofencing(39.0, 35.0, 1000.0, 60)) // 1000km radius, score increased to 60
 
 	// 2. DataCenter Detection: Identify hosting/cloud IPs
 	//    Uses ASN database to detect known hosting providers
@@ -190,12 +190,12 @@ func configureRules(eng *engine.GeoGuard) {
 	// 4. IP-GPS Crosscheck: Detect location spoofing
 	//    Compares IP-derived location with client-provided GPS
 	//    Tolerance: 50km, Risk Score: 40 for significant mismatch
-	eng.AddRule(rules.NewIPGPSRule(50.0, 40))
+	eng.AddRule(rules.IPGPS(50.0, 100)) // Score increased to 100 - BLOCK immediately on fraud
 
 	// 5. Timezone Mismatch: Detect VPN usage
 	//    Compares IP timezone with browser JavaScript timezone
 	//    Risk Score: 45 for timezone inconsistency
-	eng.AddRule(rules.NewTimezoneRule(45))
+	eng.AddRule(rules.Timezone(55)) // Score increased to 55 - ensures REVIEW status
 
 	// =====================================================
 	// STATEFUL RULES (require historical data)
@@ -206,17 +206,17 @@ func configureRules(eng *engine.GeoGuard) {
 	//    Flags if user "travels" faster than 900 km/h between logins
 	//    Risk Score: 80 for impossible travel detection
 	//    Note: VelocityRule now receives coordinates from engine via GeoContext
-	eng.AddRule(rules.NewVelocityRule(900.0, 80))
+	eng.AddRule(rules.Velocity(900.0, 80))
 
 	// 7. Device Fingerprint: Track device changes
 	//    Monitors User-Agent + Accept-Language consistency
 	//    Risk Score: 35 for new device detection
-	eng.AddRule(rules.NewFingerprintRule(35))
+	eng.AddRule(rules.Fingerprint(35))
 
 	// 8. Country Mismatch: Track geographic consistency
 	//    Flags when user's country changes between logins
 	//    Risk Score: 25 for country change (lower than velocity)
-	eng.AddRule(rules.NewCountryMismatchRule(25))
+	eng.AddRule(rules.CountryMismatch(25))
 
 	log.Println("Configured 8 security rules (5 stateless, 3 stateful)")
 }

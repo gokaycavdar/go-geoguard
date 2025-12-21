@@ -25,8 +25,8 @@ type DataCenterRule struct {
 	RiskScore       int             // Points to add when ASN matches blacklist
 }
 
-// NewDataCenterRule creates a rule with a custom ASN blacklist.
-func NewDataCenterRule(blacklist map[uint]string, score int) *DataCenterRule {
+// DataCenter creates a rule with a custom ASN blacklist.
+func DataCenter(blacklist map[uint]string, score int) *DataCenterRule {
 	return &DataCenterRule{
 		BlacklistedASNs: blacklist,
 		RiskScore:       score,
@@ -63,7 +63,7 @@ func DefaultDataCenterRule(score int) *DataCenterRule {
 		46606: "Unified Layer",
 		36352: "ColoCrossing",
 	}
-	return NewDataCenterRule(blacklist, score)
+	return DataCenter(blacklist, score)
 }
 
 func (d *DataCenterRule) Name() string {

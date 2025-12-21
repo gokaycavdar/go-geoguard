@@ -101,8 +101,8 @@ func main() {
     guard := engine.New(geoService, store)
 
     // 4. Add rules (rules never access GeoIP directly)
-    guard.AddRule(rules.NewGeofencingRule(39.0, 35.0, 500.0, 50))
-    guard.AddRule(rules.NewVelocityRule(900.0, 80))  // No GeoIP parameter
+    guard.AddRule(rules.Geofencing(39.0, 35.0, 500.0, 50))
+    guard.AddRule(rules.Velocity(900.0, 80))  // No GeoIP parameter
     guard.AddRule(rules.DefaultDataCenterRule(30))
 
     // 5. Validate a login attempt
